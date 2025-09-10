@@ -15,7 +15,9 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 // ===================================================================
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Izinkan body JSON hingga 50MB (Anda bisa sesuaikan)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true })); // Juga untuk form data
 
 // Konfigurasi Cloudinary (wajib diisi di Environment Variables Railway)
 cloudinary.config({
