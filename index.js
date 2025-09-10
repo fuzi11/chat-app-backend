@@ -15,7 +15,12 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 // ===================================================================
 const app = express();
 app.use(cors());
-app.use(express.json());
+// ... (bagian import)
+
+const app = express();
+app.use(cors()); // <-- PASTIKAN BARIS INI ADA DI ATAS
+app.use(express.json({ limit: '50mb' })); // <-- Tambahkan ini juga dari perbaikan sebelumnya
+// ... (sisa kode)
 
 // Konfigurasi Cloudinary (wajib diisi di Environment Variables Railway)
 cloudinary.config({
