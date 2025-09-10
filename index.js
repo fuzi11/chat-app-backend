@@ -1,5 +1,5 @@
 // ===================================================================
-// KODE LENGKAP - server/index.js
+// KODE LENGKAP - server/index.js (dengan perbaikan stiker)
 // ===================================================================
 const express = require('express');
 const http = require('http');
@@ -43,7 +43,7 @@ const messageSchema = new mongoose.Schema({
   message: { type: String, default: '' },
   imageUrl: { type: String, default: '' },
   videoUrl: { type: String, default: '' },
-  stickerId: { type: String, default: '' },
+  stickerId: { type: String, default: '' }, // <-- PERBAIKAN 1: Tambahkan field stiker
   isModerator: { type: Boolean, default: false },
   isDeleted: { type: Boolean, default: false },
   timestamp: { type: Date, default: Date.now }
@@ -58,18 +58,69 @@ app.post('/api/upload-image', upload.single('image'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: 'Tidak ada file yang diunggah.' });
   }
-  const url = req.file.path;
-  const isVideo = req.file.resource_type === 'video';
-  res.status(200).json({
-    imageUrl: isVideo ? '' : url,
-    videoUrl: isVideo ? url : ''
-  });
+  // Menentukan tipe media dan mengembalikan URL
+  if(req.file.resource_type === 'video') {
+    res.status(200).json({ videoUrl: req.file.path });
+  } else {
+    res.status(200).json({ imageUrl: req.file.path });
+  }
 });
 
 // --- Logika Socket.IO ---
 io.on('connection', async (socket) => {
-  // ... (sisa logika socket.io tidak berubah)
-  // ...
+  console.log(`User terhubung dengan ID: ${socket.id}`);
+
+  try {
+    const chatHistory = await Message.find({}).sort({ timestamp: 1 }).limit(100);
+    socket.emit('chat_history', chatHistory);
+  } catch (error) {
+    console.error('Gagal mengambil riwayat chat:', error);
+  }
+
+  socket.on('send_message', async (data) => {
+    const FUZI_SECRET_PASSWORD = "qwerty";
+    let isModerator = false;
+    if (data.user && data.user.toLowerCase() === 'fuzi' && data.password === FUZI_SECRET_PASSWORD) {
+        isModerator = true;
+    }
+
+    const newMessage = new Message({
+      user: data.user,
+      message: data.message,
+      imageUrl: data.imageUrl || '',
+      videoUrl: data.videoUrl || '',
+      stickerId: data.stickerId || '', // <-- PERBAIKAN 2: Simpan ID stiker
+      isModerator: isModerator,
+    });
+    
+    try {
+      const savedMessage = await newMessage.save();
+      socket.broadcast.emit('receive_message', savedMessage);
+    } catch (error) {
+      console.error("!!! ERROR: Gagal menyimpan pesan:", error);
+    }
+  });
+
+  socket.on('delete_message', async (data) => {
+      try {
+          const message = await Message.findById(data.messageId);
+          if (message && (message.user === data.user || data.isModerator)) {
+              message.isDeleted = true;
+              message.message = "[Pesan ini telah dihapus]";
+              message.imageUrl = '';
+              message.videoUrl = '';
+              message.stickerId = '';
+              const updatedMessage = await message.save();
+              io.emit('message_updated', updatedMessage);
+          }
+      } catch (error) {
+          console.error("!!! ERROR: Gagal menghapus pesan:", error);
+      }
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`User terputus: ${socket.id}`);
+  });
 });
 
 // --- Jalankan Server ---
