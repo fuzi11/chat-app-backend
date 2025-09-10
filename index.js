@@ -1,5 +1,5 @@
 // ===================================================================
-// 1. IMPORT SEMUA LIBRARY YANG DIBUTUHKAN
+// KODE LENGKAP - server/index.js (dengan perbaikan stiker)
 // ===================================================================
 const express = require('express');
 const http = require('http');
@@ -10,76 +10,63 @@ const cloudinary = require('cloudinary').v2;
 const multer = require('multer');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-// ===================================================================
-// 2. INISIALISASI & KONFIGURASI
-// ===================================================================
+// --- Inisialisasi & Konfigurasi ---
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '50mb' })); // Naikkan limit untuk base64 fallback
+app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Konfigurasi Cloudinary (wajib diisi di Environment Variables Railway)
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Konfigurasi Multer untuk penyimpanan di Cloudinary
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
-  params: {
-    folder: 'chat-app-images',
-    format: async (req, file) => 'png',
-    public_id: (req, file) => `image-${Date.now()}`,
-  },
+  params: { folder: 'chat-app-files', resource_type: 'auto' },
 });
 const upload = multer({ storage: storage });
 
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] }
-});
+const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"] }});
 
-// ===================================================================
-// 3. KONEKSI KE DATABASE MONGODB ATLAS
-// ===================================================================
+// --- Koneksi Database ---
 const MONGODB_URI = process.env.MONGODB_URI;
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('Sukses terhubung ke MongoDB Atlas.'))
   .catch((err) => console.error('Gagal terhubung ke MongoDB:', err));
 
-// ===================================================================
-// 4. SKEMA & MODEL DATABASE
-// ===================================================================
+// --- Skema & Model Database ---
 const messageSchema = new mongoose.Schema({
   user: { type: String, required: true },
   message: { type: String, default: '' },
   imageUrl: { type: String, default: '' },
+  videoUrl: { type: String, default: '' },
+  stickerId: { type: String, default: '' }, // <-- PERBAIKAN 1: Tambahkan field stiker
   isModerator: { type: Boolean, default: false },
   isDeleted: { type: Boolean, default: false },
   timestamp: { type: Date, default: Date.now }
 });
 const Message = mongoose.model('Message', messageSchema);
 
-// ===================================================================
-// 5. API ENDPOINTS
-// ===================================================================
+// --- API Endpoints ---
 app.get('/', (req, res) => {
   res.status(200).send('Health check successful. Server is running.');
 });
-
-// Rute untuk mengunggah gambar dari FormData
 app.post('/api/upload-image', upload.single('image'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: 'Tidak ada file yang diunggah.' });
   }
-  res.status(200).json({ imageUrl: req.file.path });
+  // Menentukan tipe media dan mengembalikan URL
+  if(req.file.resource_type === 'video') {
+    res.status(200).json({ videoUrl: req.file.path });
+  } else {
+    res.status(200).json({ imageUrl: req.file.path });
+  }
 });
 
-// ===================================================================
-// 6. LOGIKA UTAMA SOCKET.IO
-// ===================================================================
+// --- Logika Socket.IO ---
 io.on('connection', async (socket) => {
   console.log(`User terhubung dengan ID: ${socket.id}`);
 
@@ -101,6 +88,8 @@ io.on('connection', async (socket) => {
       user: data.user,
       message: data.message,
       imageUrl: data.imageUrl || '',
+      videoUrl: data.videoUrl || '',
+      stickerId: data.stickerId || '', // <-- PERBAIKAN 2: Simpan ID stiker
       isModerator: isModerator,
     });
     
@@ -119,6 +108,8 @@ io.on('connection', async (socket) => {
               message.isDeleted = true;
               message.message = "[Pesan ini telah dihapus]";
               message.imageUrl = '';
+              message.videoUrl = '';
+              message.stickerId = '';
               const updatedMessage = await message.save();
               io.emit('message_updated', updatedMessage);
           }
@@ -132,9 +123,7 @@ io.on('connection', async (socket) => {
   });
 });
 
-// ===================================================================
-// 7. JALANKAN SERVER
-// ===================================================================
+// --- Jalankan Server ---
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`Server berjalan di port ${PORT}`);
