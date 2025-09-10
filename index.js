@@ -15,9 +15,8 @@ const { CloudinaryStorage } = require('multer-storage-cloudinary');
 // ===================================================================
 const app = express();
 app.use(cors());
-// Izinkan body JSON hingga 50MB (Anda bisa sesuaikan)
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true })); // Juga untuk form data
+app.use(express.json({ limit: '50mb' })); // Naikkan limit untuk base64 fallback
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Konfigurasi Cloudinary (wajib diisi di Environment Variables Railway)
 cloudinary.config({
@@ -31,7 +30,7 @@ const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: 'chat-app-images',
-    format: async (req, file) => 'png', // mendukung format jpg, png, dll.
+    format: async (req, file) => 'png',
     public_id: (req, file) => `image-${Date.now()}`,
   },
 });
@@ -56,7 +55,7 @@ mongoose.connect(MONGODB_URI)
 const messageSchema = new mongoose.Schema({
   user: { type: String, required: true },
   message: { type: String, default: '' },
-  imageUrl: { type: String, default: '' }, // Field untuk URL gambar
+  imageUrl: { type: String, default: '' },
   isModerator: { type: Boolean, default: false },
   isDeleted: { type: Boolean, default: false },
   timestamp: { type: Date, default: Date.now }
@@ -66,17 +65,15 @@ const Message = mongoose.model('Message', messageSchema);
 // ===================================================================
 // 5. API ENDPOINTS
 // ===================================================================
-// Rute untuk Health Check Railway
 app.get('/', (req, res) => {
   res.status(200).send('Health check successful. Server is running.');
 });
 
-// BARU: Rute untuk mengunggah gambar
+// Rute untuk mengunggah gambar dari FormData
 app.post('/api/upload-image', upload.single('image'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: 'Tidak ada file yang diunggah.' });
   }
-  // Mengembalikan URL aman yang diberikan oleh Cloudinary
   res.status(200).json({ imageUrl: req.file.path });
 });
 
@@ -103,7 +100,7 @@ io.on('connection', async (socket) => {
     const newMessage = new Message({
       user: data.user,
       message: data.message,
-      imageUrl: data.imageUrl || '', // Simpan URL gambar jika ada
+      imageUrl: data.imageUrl || '',
       isModerator: isModerator,
     });
     
@@ -121,7 +118,7 @@ io.on('connection', async (socket) => {
           if (message && (message.user === data.user || data.isModerator)) {
               message.isDeleted = true;
               message.message = "[Pesan ini telah dihapus]";
-              message.imageUrl = ''; // Hapus juga URL gambar saat pesan dihapus
+              message.imageUrl = '';
               const updatedMessage = await message.save();
               io.emit('message_updated', updatedMessage);
           }
